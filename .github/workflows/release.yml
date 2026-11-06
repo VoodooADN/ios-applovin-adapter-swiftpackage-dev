@@ -1,0 +1,43 @@
+name: Release
+
+# Publishes a GitHub Release for every version tag the Voodoo Adn release
+# workflow pushes here. SwiftPM resolves the tag; the Release is what people
+# browsing or watching this repository see.
+#
+# Only the highest version moves the default branch, so a tag on that branch
+# is the latest release. A tag off it, a patch of an older line, gets a
+# Release without the Latest badge.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "✅ ${TAG} already has a release. Nothing to do."
+            exit 0
+          fi
+          # "identical" or "ahead": the tagged commit is on the default branch.
+          STATUS=$(gh api "repos/${GH_REPO}/compare/${TAG}...${DEFAULT_BRANCH}" --jq .status)
+          case "$STATUS" in
+            identical|ahead) LATEST=true ;;
+            *) LATEST=false ;;
+          esac
+          gh release create "$TAG" --verify-tag --latest="$LATEST" \
+            --title "VoodooMaxAdapter ${VERSION}" \
+            --notes "AppLovin MAX adapter ${VERSION}, for Voodoo Adn ${VERSION}."
+          echo "✅ Release ${TAG} created (latest: ${LATEST})"
